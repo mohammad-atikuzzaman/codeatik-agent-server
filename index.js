@@ -60,7 +60,7 @@ app.post("/api/generate", async (req, res) => {
     zip.writeZip(zipPath);
 
     // Instead of res.download(), send the URL for frontend to fetch
-    res.json({ downloadUrl: `/download/${folderId}` });
+    res.json({ downloadUrl: `http://localhost:3000/download/${folderId}` });
   } catch (error) {
     console.error("Generation failed:", error.message);
     res.status(500).json({ error: "Failed to generate code" });
