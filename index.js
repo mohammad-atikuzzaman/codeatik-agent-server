@@ -79,30 +79,19 @@ app.get("/api/download/:id", (req, res) => {
     return res.status(404).json({ error: "Project not found" });
   }
 
-  // Create ZIP
   const zip = new AdmZip();
   zip.addLocalFolder(folderPath);
   zip.writeZip(zipPath);
 
-  res.json({
-    downloadUrl: `http://localhost:${PORT}/download/${folderId}`,
+  res.download(zipPath, "generated-site.zip", (err) => {
+    if (!err) {
+      fs.unlinkSync(zipPath);
+    } else {
+      console.error("Download failed:", err);
+    }
   });
 });
 
-// Actual download route
-app.get("/download/:id", (req, res) => {
-  const zipFile = path.join(__dirname, "generated", `${req.params.id}.zip`);
-  if (fs.existsSync(zipFile)) {
-    res.download(zipFile, "generated-site.zip", (err) => {
-      if (!err) {
-        // ✅ Only delete ZIP file after download
-        fs.unlinkSync(zipFile);
-      }
-    });
-  } else {
-    res.status(404).send("File not found");
-  }
-});
 
 // Root
 app.get("/", (req, res) => {
