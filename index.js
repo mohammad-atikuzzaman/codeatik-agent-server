@@ -18,10 +18,15 @@ const __dirname = path.dirname(__filename);
 app.use(cors());
 app.use(express.json());
 
+// Serve static files for preview
+app.use("/preview", express.static(path.join(__dirname, "generated")));
+
+// POST: Generate Site
 app.post("/api/generate", async (req, res) => {
   const { prompt } = req.body;
   const folderId = uuidv4();
   const outputPath = path.join(__dirname, "generated", folderId);
+
   fs.mkdirSync(outputPath, { recursive: true });
 
   try {
@@ -54,30 +59,43 @@ app.post("/api/generate", async (req, res) => {
       fs.writeFileSync(fullPath, codeMap[filePath]);
     }
 
-    const zip = new AdmZip();
-    zip.addLocalFolder(outputPath);
-    const zipPath = path.join(__dirname, "generated", `${folderId}.zip`);
-    zip.writeZip(zipPath);
-
-    // Instead of res.download(), send the URL for frontend to fetch
-    res.json({ downloadUrl: `http://localhost:3000/download/${folderId}` });
+    res.json({
+      id: folderId,
+      previewUrl: `http://localhost:${PORT}/preview/${folderId}/index.html`,
+    });
   } catch (error) {
     console.error("Generation failed:", error.message);
-    res.status(500).json({ error: "Failed to generate code" });
+    res.status(500).json({ error: "Failed to generate site" });
   }
 });
 
-// Serve ZIP files on /download/:id route
+// GET: Prepare ZIP & send download link
+app.get("/api/download/:id", (req, res) => {
+  const folderId = req.params.id;
+  const folderPath = path.join(__dirname, "generated", folderId);
+  const zipPath = path.join(__dirname, "generated", `${folderId}.zip`);
+
+  if (!fs.existsSync(folderPath)) {
+    return res.status(404).json({ error: "Project not found" });
+  }
+
+  // Create ZIP
+  const zip = new AdmZip();
+  zip.addLocalFolder(folderPath);
+  zip.writeZip(zipPath);
+
+  res.json({
+    downloadUrl: `http://localhost:${PORT}/download/${folderId}`,
+  });
+});
+
+// Actual download route
 app.get("/download/:id", (req, res) => {
   const zipFile = path.join(__dirname, "generated", `${req.params.id}.zip`);
   if (fs.existsSync(zipFile)) {
-    res.download(zipFile, "generated-code.zip", (err) => {
+    res.download(zipFile, "generated-site.zip", (err) => {
       if (!err) {
-        // Delete after download
-        fs.rmSync(path.join(__dirname, "generated", req.params.id), {
-          recursive: true,
-          force: true,
-        });
+        // ✅ Only delete ZIP file after download
         fs.unlinkSync(zipFile);
       }
     });
@@ -86,8 +104,9 @@ app.get("/download/:id", (req, res) => {
   }
 });
 
+// Root
 app.get("/", (req, res) => {
-  res.send("Hello World!");
+  res.send("🌐 Site Generator Server Running");
 });
 
 app.listen(PORT, () => {
