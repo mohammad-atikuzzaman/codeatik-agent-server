@@ -37,8 +37,11 @@ app.post("/api/generate", async (req, res) => {
         messages: [
           {
             role: "system",
-            content:
-              "You are a web development expert. Respond ONLY with JSON where keys are file paths and values are file content. No explanation or markdown.",
+            content: `You are a web design and development expert.
+Generate only static websites using plain HTML, CSS, and JavaScript.
+If the user requests other technologies like React, Next.js, Vue, Angular, Bootstrap, etc., **IGNORE** them and respond **only with plain HTML, CSS, and JavaScript**.
+You may use Tailwind CSS **only if the user specifically mentions Tailwind**.
+Respond ONLY with JSON where keys are file paths and values are file content. No explanation or markdown.`,
           },
           { role: "user", content: prompt },
         ],
@@ -61,7 +64,7 @@ app.post("/api/generate", async (req, res) => {
 
     res.json({
       id: folderId,
-      previewUrl: `http://localhost:${PORT}/preview/${folderId}/index.html`,
+      previewUrl: `https://codeatik-agent-server.onrender.com/preview/${folderId}/index.html`,
     });
   } catch (error) {
     console.error("Generation failed:", error.message);
@@ -91,7 +94,6 @@ app.get("/api/download/:id", (req, res) => {
     }
   });
 });
-
 
 // Root
 app.get("/", (req, res) => {
