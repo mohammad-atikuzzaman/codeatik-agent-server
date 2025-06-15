@@ -71,7 +71,7 @@ USER PROMPT: ${prompt}
           Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
           "Content-Type": "application/json",
         },
-        timeout: 30000
+        timeout: 30000,
       }
     );
 
@@ -88,8 +88,8 @@ USER PROMPT: ${prompt}
 
     // Enhanced cleaning
     rawContent = rawContent
-      .replace(/^[\s]*```(?:json)?/gm, "")  // Remove starting code blocks
-      .replace(/```[\s]*$/gm, "")           // Remove ending code blocks
+      .replace(/^[\s]*```(?:json)?/gm, "") // Remove starting code blocks
+      .replace(/```[\s]*$/gm, "") // Remove ending code blocks
       .trim();
 
     // Robust JSON parsing with fallback
@@ -97,8 +97,11 @@ USER PROMPT: ${prompt}
     try {
       codeMap = JSON.parse(rawContent);
     } catch (parseError) {
-      console.error("Initial JSON parse failed. Attempting fixes...", parseError);
-      
+      console.error(
+        "Initial JSON parse failed. Attempting fixes...",
+        parseError
+      );
+
       // Try fixing common issues
       try {
         // Fix 1: Remove any text outside of {}
@@ -108,29 +111,41 @@ USER PROMPT: ${prompt}
           throw new Error("No JSON structure found in response");
         }
         const jsonString = rawContent.substring(jsonStart, jsonEnd);
-        
+
         // Fix 2: Handle common JSON issues
         const fixedContent = jsonString
-          .replace(/(['"])?([a-zA-Z0-9_\-]+)(['"])?:/g, '"$2":')  // Fix unquoted keys
-          .replace(/'/g, '"')               // Replace single quotes
-          .replace(/,\s*([}\]])/g, '$1')    // Remove trailing commas
-          .replace(/\\\//g, '/')             // Fix escaped forward slashes
-          .replace(/\\n/g, '\n')            // Fix newline characters
-          .replace(/\\t/g, '  ')             // Fix tabs
-          .replace(/\\\\/g, '\\');           // Fix double backslashes
+          .replace(/(['"])?([a-zA-Z0-9_\-]+)(['"])?:/g, '"$2":') // Fix unquoted keys
+          .replace(/'/g, '"') // Replace single quotes
+          .replace(/,\s*([}\]])/g, "$1") // Remove trailing commas
+          .replace(/\\\//g, "/") // Fix escaped forward slashes
+          .replace(/\\n/g, "\n") // Fix newline characters
+          .replace(/\\t/g, "  ") // Fix tabs
+          .replace(/\\\\/g, "\\"); // Fix double backslashes
 
-        console.log("Fixed JSON content:", fixedContent.substring(0, 500) + "...");
+        console.log(
+          "Fixed JSON content:",
+          fixedContent.substring(0, 500) + "..."
+        );
         codeMap = JSON.parse(fixedContent);
       } catch (finalError) {
         console.error("Final JSON parse error:", finalError.message);
-        console.error("Problematic content snippet:", rawContent.substring(0, 1000));
+        console.error(
+          "Problematic content snippet:",
+          rawContent.substring(0, 1000)
+        );
         throw new Error(`JSON parse failed: ${finalError.message}`);
       }
     }
 
     // Validate codeMap structure
-    if (typeof codeMap !== "object" || codeMap === null || Array.isArray(codeMap)) {
-      throw new Error("Invalid code structure - expected object with file paths");
+    if (
+      typeof codeMap !== "object" ||
+      codeMap === null ||
+      Array.isArray(codeMap)
+    ) {
+      throw new Error(
+        "Invalid code structure - expected object with file paths"
+      );
     }
 
     // Write files
@@ -142,34 +157,37 @@ USER PROMPT: ${prompt}
 
       const fullPath = path.join(outputPath, filePath);
       const dir = path.dirname(fullPath);
-      
+
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
-      
+
       fs.writeFileSync(fullPath, content);
       console.log(`Created: ${filePath}`);
     }
 
     res.json({
       id: folderId,
-      previewUrl: `${req.protocol}://${req.get("host")}/preview/${folderId}/index.html`,
+      previewUrl: `https://codeatik-agent-server.onrender.com/preview/${folderId}/index.html`,
+      // previewUrl: `${req.protocol}://${req.get("host")}/preview/${folderId}/index.html`,
     });
   } catch (error) {
     console.error("Generation failed:", {
       message: error.message,
       stack: error.stack,
-      response: error.response?.data ? JSON.stringify(error.response.data, null, 2) : "N/A"
+      response: error.response?.data
+        ? JSON.stringify(error.response.data, null, 2)
+        : "N/A",
     });
-    
+
     // Clean up failed generation directory
     if (fs.existsSync(outputPath)) {
       fs.rmSync(outputPath, { recursive: true, force: true });
     }
-    
-    res.status(500).json({ 
+
+    res.status(500).json({
       error: "Failed to generate site",
-      details: error.message
+      details: error.message,
     });
   }
 });
@@ -188,13 +206,13 @@ app.get("/api/download/:id", (req, res) => {
     const zip = new AdmZip();
     zip.addLocalFolder(folderPath);
     zip.writeZip(zipPath);
-    
+
     res.download(zipPath, "generated-site.zip", (err) => {
       if (err) {
         console.error("Download failed:", err);
         res.status(500).json({ error: "Download failed" });
       }
-      
+
       // Clean up ZIP file after download
       if (fs.existsSync(zipPath)) {
         fs.unlinkSync(zipPath);
