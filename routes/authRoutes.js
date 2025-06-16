@@ -17,6 +17,7 @@ router.get(
     scope: ["profile", "email"],
   })
 );
+// this is call back url
 router.get(
   "/callback/google",
   passport.authenticate("google", { session: false }),
