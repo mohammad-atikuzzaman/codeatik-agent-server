@@ -26,12 +26,19 @@ app.use(passport.initialize());
 
 app.use("/preview", express.static(serverConfig.GENERATED_SITES_DIR));
 
+// website builder routes
 app.use("/api", siteRoutes);
 
+// others routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 
 app.use(errorHandler);
+
+// Home route
+app.use("/", async(req, res)=>{
+  res.send("Welcome to codeatik-agent server")
+})
 
 app.listen(serverConfig.PORT, () => {
   console.log(`🚀 Server running at http://localhost:${serverConfig.PORT}`);
