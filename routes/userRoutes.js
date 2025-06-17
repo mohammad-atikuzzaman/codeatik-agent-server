@@ -6,7 +6,7 @@ import User from "../models/User.js";
 const router = express.Router();
 
 
-router.get("/", async(req, res)=>{
+router.get("/",authenticate, authorizeRole("admin"), async(req, res)=>{
   const user = await User.find()
   res.json(user)
 })
