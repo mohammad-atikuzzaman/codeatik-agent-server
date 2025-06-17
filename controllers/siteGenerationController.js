@@ -1,4 +1,5 @@
 import SiteModel from "../models/siteModel.js";
+import SitesGenerationData from "../models/SitesGenerationData.js";
 import { generateSite } from "../services/aiGenerationService.js";
 
 export const generateSiteController = async (req, res, next) => {
@@ -13,10 +14,15 @@ export const generateSiteController = async (req, res, next) => {
 
     res.json({
       id: site.id,
-      previewUrl: `${process.env.API_URL}/preview/${
-        site.id
-      }/index.html`,
+      previewUrl: `${process.env.API_URL}/preview/${site.id}/index.html`,
     });
+
+    const generatedData = await SitesGenerationData.create({
+      email: req.user.email,
+      prompt,
+      folderId: site.id,
+    });
+    console.log(generatedData);
   } catch (error) {
     next(error);
   }
