@@ -4,16 +4,17 @@ import passport from "passport";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
 
-import "./config/passport.js"
+import "./config/passport.js";
 import connectDB from "./config/db.js";
 
 import serverConfig from "./config/serverConfig.js";
 import { errorHandler } from "./utils/errorHandler.js";
 
 import siteRoutes from "./routes/siteRoutes.js";
-import authRoutes from "./routes/authRoutes.js"
-import userRoutes  from "./routes/userRoutes.js"
-import sendEmailRoutes from "./routes/sendEmailRutes.js"
+import authRoutes from "./routes/authRoutes.js";
+import userRoutes from "./routes/userRoutes.js";
+import sendEmailRoutes from "./routes/sendEmailRutes.js";
+import statsRoute from "./routes/statsRoute.js"
 
 const app = express();
 
@@ -33,16 +34,17 @@ app.use("/api", siteRoutes);
 // others routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api", statsRoute);
 
 // send email
-app.use("/send-email", sendEmailRoutes )
+app.use("/send-email", sendEmailRoutes);
 
 app.use(errorHandler);
 
 // Home route
-app.use("/", async(req, res)=>{
-  res.send("Welcome to codeatik-agent server")
-})
+app.use("/", async (req, res) => {
+  res.send("Welcome to codeatik-agent server");
+});
 
 app.listen(serverConfig.PORT, () => {
   console.log(`🚀 Server running at http://localhost:${serverConfig.PORT}`);
