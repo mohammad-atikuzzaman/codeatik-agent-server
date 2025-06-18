@@ -57,7 +57,10 @@ then run the command
 ```
 npm install
 ```
-
+then run the command
+```
+npm run dev
+```
 ## 🔧 Environment Variables need to run the project
 
 ### Frontend `.env.local`
