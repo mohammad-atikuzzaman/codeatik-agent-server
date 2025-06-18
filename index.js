@@ -13,6 +13,7 @@ import { errorHandler } from "./utils/errorHandler.js";
 import siteRoutes from "./routes/siteRoutes.js";
 import authRoutes from "./routes/authRoutes.js"
 import userRoutes  from "./routes/userRoutes.js"
+import sendEmailRoutes from "./routes/sendEmailRutes.js"
 
 const app = express();
 
@@ -32,6 +33,9 @@ app.use("/api", siteRoutes);
 // others routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
+
+// send email
+app.use("/send-email", sendEmailRoutes )
 
 app.use(errorHandler);
 
