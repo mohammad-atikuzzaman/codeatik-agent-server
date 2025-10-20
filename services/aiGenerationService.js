@@ -5,7 +5,7 @@ export const generateSite = async (prompt) => {
   const response = await axios.post(
     "https://openrouter.ai/api/v1/chat/completions",
     {
-      model: "deepseek/deepseek-r1:free",
+      model: "x-ai/grok-code-fast-1",
       messages: [
         {
           role: "user",
