@@ -1,4 +1,5 @@
 import SiteProject from "../models/SiteProject.js";
+import { sanitizeModel } from "../config/allowedModels.js";
 import {
   generateSite,
   planArchitecture,
@@ -24,6 +25,7 @@ const formatFilesArray = (filesDict) => {
  */
 export const generateSiteStreamController = async (req, res) => {
   const { prompt, model } = req.body;
+  const targetModel = sanitizeModel(model);
   if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
     return res.status(400).json({ error: "A valid prompt is required" });
   }
@@ -52,7 +54,7 @@ export const generateSiteStreamController = async (req, res) => {
       message: "Chief Architect Agent: Analyzing intent & formulating UX blueprint...",
     });
 
-    const blueprint = await planArchitecture(prompt.trim(), model);
+    const blueprint = await planArchitecture(prompt.trim(), targetModel);
 
     // Stream blueprint to client immediately
     sendEvent("blueprint", blueprint);
@@ -65,7 +67,7 @@ export const generateSiteStreamController = async (req, res) => {
       message: `Lead Engineer Agent: Synthesizing "${blueprint.title}" (HTML5, Tailwind CSS, ES6 JS)...`,
     });
 
-    const synthesized = await synthesizeCode(prompt.trim(), blueprint, model);
+    const synthesized = await synthesizeCode(prompt.trim(), blueprint, targetModel);
 
     // Stage 3: QA & Database Persistence Agent
     sendEvent("stage", {
@@ -119,12 +121,13 @@ export const generateSiteStreamController = async (req, res) => {
  */
 export const generateSiteController = async (req, res, next) => {
   const { prompt, model } = req.body;
+  const targetModel = sanitizeModel(model);
   if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
     return res.status(400).json({ error: "A valid prompt is required" });
   }
 
   try {
-    const aiResult = await generateSite(prompt.trim(), null, null, model);
+    const aiResult = await generateSite(prompt.trim(), null, null, targetModel);
     const filesArray = formatFilesArray(aiResult.files);
 
     const site = await SiteProject.create({
@@ -163,6 +166,7 @@ export const generateSiteController = async (req, res, next) => {
  */
 export const refineSiteController = async (req, res, next) => {
   const { projectId, prompt, model } = req.body;
+  const targetModel = sanitizeModel(model);
   if (!projectId || !prompt || typeof prompt !== "string" || !prompt.trim()) {
     return res.status(400).json({ error: "projectId and refinement prompt are required" });
   }
@@ -182,7 +186,7 @@ export const refineSiteController = async (req, res, next) => {
       previousFiles[f.name] = f.content;
     }
 
-    const aiResult = await generateSite(prompt.trim(), previousFiles, site.blueprint, model);
+    const aiResult = await generateSite(prompt.trim(), previousFiles, site.blueprint, targetModel);
     const updatedFilesArray = formatFilesArray(aiResult.files);
 
     const nextRevisionNumber = (site.revisions?.length || 0) + 1;

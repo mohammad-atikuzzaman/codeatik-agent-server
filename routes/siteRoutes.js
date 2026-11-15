@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { ALLOWED_MODELS, DEFAULT_MODEL } from "../config/allowedModels.js";
 import {
   generateSiteController,
   generateSiteStreamController,
@@ -19,6 +20,14 @@ const router = Router();
 
 // Rate limiter: 6 requests per 10 minutes to protect AI quota
 const aiRateLimiter = rateLimiter(6, 10 * 60 * 1000);
+
+// Permitted AI Models Endpoint
+router.get("/models", (req, res) => {
+  res.json({
+    models: ALLOWED_MODELS,
+    defaultModel: DEFAULT_MODEL,
+  });
+});
 
 // Real Server-Sent Events (SSE) Agentic Stream Route
 router.post("/generate/stream", authenticate, aiRateLimiter, generateSiteStreamController);
