@@ -1,5 +1,4 @@
-import axios from "axios";
-import serverConfig from "../config/serverConfig.js";
+import { callOpenRouter } from "./openRouterService.js";
 import {
   ARCHITECT_AGENT_PROMPT,
   CODE_SYNTHESIZER_PROMPT,
@@ -10,30 +9,20 @@ import {
  * Stage 1: The Chief UX/UI Architect Agent
  * Deconstructs user prompt into a cohesive architectural blueprint.
  */
-export const planArchitecture = async (prompt) => {
+export const planArchitecture = async (prompt, requestedModel = null) => {
   try {
-    const response = await axios.post(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        model: process.env.AI_MODEL || "x-ai/grok-code-fast-1",
-        messages: [
-          { role: "system", content: ARCHITECT_AGENT_PROMPT },
-          { role: "user", content: `USER REQUEST: ${prompt}\n\nFormulate the complete UX/UI Architecture Blueprint in JSON.` },
-        ],
-        temperature: 0.2,
-        max_tokens: 1500,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${serverConfig.OPENROUTER_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        timeout: 25000,
-      }
-    );
+    const { content } = await callOpenRouter({
+      requestedModel,
+      messages: [
+        { role: "system", content: ARCHITECT_AGENT_PROMPT },
+        { role: "user", content: `USER REQUEST: ${prompt}\n\nFormulate the complete UX/UI Architecture Blueprint in JSON.` },
+      ],
+      temperature: 0.2,
+      max_tokens: 1200,
+      timeout: 25000,
+    });
 
-    const raw = response.data?.choices?.[0]?.message?.content || "";
-    return parseBlueprint(raw, prompt);
+    return parseBlueprint(content, prompt);
   } catch (error) {
     console.warn("Architect Agent fallback triggered:", error.message);
     return createFallbackBlueprint(prompt);
@@ -44,7 +33,7 @@ export const planArchitecture = async (prompt) => {
  * Stage 2: Senior Frontend Code Synthesizer
  * Generates code directly adhering to the Architect's Blueprint.
  */
-export const synthesizeCode = async (prompt, blueprint) => {
+export const synthesizeCode = async (prompt, blueprint, requestedModel = null) => {
   const blueprintSummary = JSON.stringify(blueprint, null, 2);
   const userContent = `
 USER ORIGINAL PROMPT:
@@ -56,85 +45,70 @@ ${blueprintSummary}
 Synthesize the complete, production-ready website with index.html, styles.css, and script.js adhering strictly to this blueprint.
 `.trim();
 
-  const response = await axios.post(
-    "https://openrouter.ai/api/v1/chat/completions",
-    {
-      model: process.env.AI_MODEL || "x-ai/grok-code-fast-1",
-      messages: [
-        { role: "system", content: CODE_SYNTHESIZER_PROMPT },
-        { role: "user", content: userContent },
-      ],
-      temperature: 0.25,
-      max_tokens: 8000,
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${serverConfig.OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      timeout: 50000,
-    }
-  );
+  const { content, modelUsed } = await callOpenRouter({
+    requestedModel,
+    messages: [
+      { role: "system", content: CODE_SYNTHESIZER_PROMPT },
+      { role: "user", content: userContent },
+    ],
+    temperature: 0.25,
+    max_tokens: 4000,
+    timeout: 50000,
+  });
 
-  const rawContent = response.data?.choices?.[0]?.message?.content;
-  if (!rawContent) {
-    throw new Error("Empty response received from Code Synthesizer Agent");
-  }
-
-  const parsed = parseAndHealGeneratedContent(rawContent, prompt);
-  return postProcessAndEnrichFiles(parsed, blueprint);
+  const parsed = parseAndHealGeneratedContent(content, prompt);
+  const enriched = postProcessAndEnrichFiles(parsed, blueprint);
+  enriched.modelUsed = modelUsed;
+  return enriched;
 };
 
 /**
  * Master Agentic Entry Point: Runs the multi-agent pipeline
  */
-export const generateSite = async (prompt, previousFiles = null, previousBlueprint = null) => {
+export const generateSite = async (
+  prompt,
+  previousFiles = null,
+  previousBlueprint = null,
+  requestedModel = null
+) => {
   // If refinement on existing website:
   if (previousFiles && typeof previousFiles === "object") {
     const userContent = buildRefinementPrompt(prompt, previousFiles, previousBlueprint);
-    const response = await axios.post(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        model: process.env.AI_MODEL || "x-ai/grok-code-fast-1",
-        messages: [
-          { role: "system", content: CODE_SYNTHESIZER_PROMPT },
-          { role: "user", content: userContent },
-        ],
-        temperature: 0.25,
-        max_tokens: 8000,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${serverConfig.OPENROUTER_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        timeout: 50000,
-      }
-    );
+    const { content, modelUsed } = await callOpenRouter({
+      requestedModel,
+      messages: [
+        { role: "system", content: CODE_SYNTHESIZER_PROMPT },
+        { role: "user", content: userContent },
+      ],
+      temperature: 0.25,
+      max_tokens: 4000,
+      timeout: 50000,
+    });
 
-    const rawContent = response.data?.choices?.[0]?.message?.content;
-    const parsed = parseAndHealGeneratedContent(rawContent, prompt);
+    const parsed = parseAndHealGeneratedContent(content, prompt);
     const enriched = postProcessAndEnrichFiles(parsed, previousBlueprint);
     return {
       title: enriched.title,
       blueprint: previousBlueprint,
       files: enriched.files,
+      modelUsed,
     };
   }
 
   // Full Agentic 2-Stage Pipeline:
   // Step 1: Architect Agent plans the blueprint
   console.log(`[Agentic Stage 1] Formulating UX Architecture Blueprint for: "${prompt}"...`);
-  const blueprint = await planArchitecture(prompt);
+  const blueprint = await planArchitecture(prompt, requestedModel);
 
   // Step 2: Code Synthesizer Agent implements the blueprint
   console.log(`[Agentic Stage 2] Synthesizing production code based on blueprint: "${blueprint.title}"...`);
-  const synthesized = await synthesizeCode(prompt, blueprint);
+  const synthesized = await synthesizeCode(prompt, blueprint, requestedModel);
 
   return {
     title: blueprint.title || synthesized.title,
     blueprint,
     files: synthesized.files,
+    modelUsed: synthesized.modelUsed,
   };
 };
 

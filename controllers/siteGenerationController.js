@@ -23,7 +23,7 @@ const formatFilesArray = (filesDict) => {
  * Streams real-time agentic pipeline stages to the client.
  */
 export const generateSiteStreamController = async (req, res) => {
-  const { prompt } = req.body;
+  const { prompt, model } = req.body;
   if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
     return res.status(400).json({ error: "A valid prompt is required" });
   }
@@ -52,9 +52,9 @@ export const generateSiteStreamController = async (req, res) => {
       message: "Chief Architect Agent: Analyzing intent & formulating UX blueprint...",
     });
 
-    const blueprint = await planArchitecture(prompt.trim());
+    const blueprint = await planArchitecture(prompt.trim(), model);
 
-    // Stream blueprint to client immediately so UI shows planned theme & palette
+    // Stream blueprint to client immediately
     sendEvent("blueprint", blueprint);
 
     // Stage 2: Lead Frontend Synthesizer Agent
@@ -65,7 +65,7 @@ export const generateSiteStreamController = async (req, res) => {
       message: `Lead Engineer Agent: Synthesizing "${blueprint.title}" (HTML5, Tailwind CSS, ES6 JS)...`,
     });
 
-    const synthesized = await synthesizeCode(prompt.trim(), blueprint);
+    const synthesized = await synthesizeCode(prompt.trim(), blueprint, model);
 
     // Stage 3: QA & Database Persistence Agent
     sendEvent("stage", {
@@ -100,6 +100,7 @@ export const generateSiteStreamController = async (req, res) => {
       blueprint: site.blueprint,
       previewUrl: `${process.env.API_URL || ""}/api/preview/${site._id}/index.html`,
       files: synthesized.files,
+      modelUsed: synthesized.modelUsed,
       createdAt: site.createdAt,
     });
 
@@ -117,13 +118,13 @@ export const generateSiteStreamController = async (req, res) => {
  * Handle initial site generation via standard JSON endpoint
  */
 export const generateSiteController = async (req, res, next) => {
-  const { prompt } = req.body;
+  const { prompt, model } = req.body;
   if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
     return res.status(400).json({ error: "A valid prompt is required" });
   }
 
   try {
-    const aiResult = await generateSite(prompt.trim());
+    const aiResult = await generateSite(prompt.trim(), null, null, model);
     const filesArray = formatFilesArray(aiResult.files);
 
     const site = await SiteProject.create({
@@ -148,6 +149,7 @@ export const generateSiteController = async (req, res, next) => {
       blueprint: site.blueprint,
       previewUrl: `${process.env.API_URL || ""}/api/preview/${site._id}/index.html`,
       files: aiResult.files,
+      modelUsed: aiResult.modelUsed,
       createdAt: site.createdAt,
     });
   } catch (error) {
@@ -160,7 +162,7 @@ export const generateSiteController = async (req, res, next) => {
  * Handle iterative refinement on an existing site
  */
 export const refineSiteController = async (req, res, next) => {
-  const { projectId, prompt } = req.body;
+  const { projectId, prompt, model } = req.body;
   if (!projectId || !prompt || typeof prompt !== "string" || !prompt.trim()) {
     return res.status(400).json({ error: "projectId and refinement prompt are required" });
   }
@@ -180,7 +182,7 @@ export const refineSiteController = async (req, res, next) => {
       previousFiles[f.name] = f.content;
     }
 
-    const aiResult = await generateSite(prompt.trim(), previousFiles, site.blueprint);
+    const aiResult = await generateSite(prompt.trim(), previousFiles, site.blueprint, model);
     const updatedFilesArray = formatFilesArray(aiResult.files);
 
     const nextRevisionNumber = (site.revisions?.length || 0) + 1;
@@ -201,6 +203,7 @@ export const refineSiteController = async (req, res, next) => {
       revision: nextRevisionNumber,
       previewUrl: `${process.env.API_URL || ""}/api/preview/${site._id}/index.html`,
       files: aiResult.files,
+      modelUsed: aiResult.modelUsed,
       updatedAt: site.updatedAt,
     });
   } catch (error) {
