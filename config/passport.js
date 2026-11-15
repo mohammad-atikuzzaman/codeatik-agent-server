@@ -12,15 +12,40 @@ passport.use(
       callbackURL: process.env.GOOGLE_CALLBACK_URL,
     },
     async (accessToken, refreshToken, profile, done) => {
-      const existingUser = await User.findOne({ googleId: profile.id });
-      if (existingUser) return done(null, existingUser);
+      try {
+        const email = profile.emails?.[0]?.value;
+        if (!email) {
+          return done(new Error("No email returned from Google profile"), null);
+        }
 
-      const user = new User({
-        googleId: profile.id,
-        email: profile.emails[0].value,
-      });
-      await user.save();
-      done(null, user);
+        const normalizedEmail = email.toLowerCase().trim();
+
+        // Find existing user by googleId OR email
+        let user = await User.findOne({
+          $or: [{ googleId: profile.id }, { email: normalizedEmail }],
+        });
+
+        if (user) {
+          // Link googleId if user registered previously with password
+          if (!user.googleId) {
+            user.googleId = profile.id;
+            await user.save();
+          }
+          return done(null, user);
+        }
+
+        // Create new user if not exists
+        user = await User.create({
+          googleId: profile.id,
+          email: normalizedEmail,
+          role: "user",
+        });
+
+        return done(null, user);
+      } catch (err) {
+        console.error("Google OAuth strategy error:", err);
+        return done(err, null);
+      }
     }
   )
 );
