@@ -3,7 +3,17 @@ import serverConfig from "../config/serverConfig.js";
 import { sanitizeModel, DEFAULT_MODEL } from "../config/allowedModels.js";
 
 /**
- * OpenRouter Unified Client with Whitelist Enforcement & Resilient Fallbacks
+ * Resilient free fallback order
+ */
+const FALLBACK_CANDIDATES = [
+  "particle-ai/particle-1:free",
+  "nvidia/nemotron-3.5-super-vl:free",
+  "baidu/ernie-5.5-flash-preview:free",
+  "openrouter/free",
+];
+
+/**
+ * OpenRouter Unified Client with Whitelist Enforcement & Resilient Reasoning Extraction
  */
 export const callOpenRouter = async ({
   messages,
@@ -12,11 +22,13 @@ export const callOpenRouter = async ({
   requestedModel = null,
   timeout = 50000,
 }) => {
-  // Strictly enforce the whitelist of permitted models
   const primaryModel = sanitizeModel(requestedModel || process.env.AI_MODEL || DEFAULT_MODEL);
-  
-  // Fallback to default allowed model if primary isn't default, otherwise another free allowed model
-  const fallbackModel = primaryModel === DEFAULT_MODEL ? "inclusionai/ling-3.2-flash:free" : DEFAULT_MODEL;
+
+  // Build trial queue without duplicate entries
+  const trialQueue = [
+    primaryModel,
+    ...FALLBACK_CANDIDATES.filter((m) => m !== primaryModel),
+  ];
 
   const headers = {
     Authorization: `Bearer ${serverConfig.OPENROUTER_API_KEY}`,
@@ -25,71 +37,67 @@ export const callOpenRouter = async ({
     "X-Title": "CodeAtik Agent",
   };
 
-  const makeRequest = async (modelToUse, tokens) => {
-    return await axios.post(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        model: modelToUse,
-        messages,
-        temperature,
-        max_tokens: tokens,
-      },
-      {
-        headers,
-        timeout,
-      }
-    );
-  };
+  let lastError = null;
 
-  // Attempt 1: Whitelisted Primary Model
-  try {
-    const res = await makeRequest(primaryModel, max_tokens);
-    const content = res.data?.choices?.[0]?.message?.content;
-    if (content) {
-      return { content, modelUsed: primaryModel };
-    }
-    throw new Error("Empty completion from primary model");
-  } catch (primaryErr) {
-    const status = primaryErr.response?.status;
-    const errorMsg = primaryErr.response?.data?.error?.message || primaryErr.message;
-    console.warn(`[OpenRouter] Primary model "${primaryModel}" failed (${status || "ERR"}): ${errorMsg}`);
+  for (let i = 0; i < trialQueue.length; i++) {
+    const currentModel = trialQueue[i];
+    const isPrimary = i === 0;
 
-    // If already using fallback model, try ultimate safe fallback openrouter/free
-    if (primaryModel === fallbackModel) {
-      console.log(`[OpenRouter] Attempting emergency free router fallback...`);
-      try {
-        const emergencyRes = await makeRequest("openrouter/free", Math.min(max_tokens, 4000));
-        const content = emergencyRes.data?.choices?.[0]?.message?.content;
-        if (content) {
-          return { content, modelUsed: "openrouter/free" };
-        }
-      } catch (err) {
-        throw primaryErr;
-      }
-    }
-
-    // Attempt 2: Whitelisted Fallback Model
-    console.log(`[OpenRouter] Falling back to resilient model: "${fallbackModel}"...`);
     try {
-      const fallbackRes = await makeRequest(fallbackModel, Math.min(max_tokens, 4000));
-      const content = fallbackRes.data?.choices?.[0]?.message?.content;
-      if (content) {
-        return { content, modelUsed: fallbackModel };
+      if (!isPrimary) {
+        console.log(`[OpenRouter Cascade] Trying fallback model: "${currentModel}"...`);
       }
-      throw new Error("Empty completion from fallback model");
-    } catch (fallbackErr) {
-      console.error("[OpenRouter] Fallback model also failed:", fallbackErr.response?.data || fallbackErr.message);
-      // Last-ditch emergency attempt with openrouter/free
-      try {
-        const emergencyRes = await makeRequest("openrouter/free", Math.min(max_tokens, 4000));
-        const content = emergencyRes.data?.choices?.[0]?.message?.content;
-        if (content) {
-          return { content, modelUsed: "openrouter/free" };
+
+      const res = await axios.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+          model: currentModel,
+          messages,
+          temperature,
+          max_tokens,
+        },
+        {
+          headers,
+          timeout,
         }
-      } catch (emErr) {
-        // Ignore emergency error, throw the fallback error
+      );
+
+      const message = res.data?.choices?.[0]?.message;
+      let content = message?.content;
+
+      // Extract from reasoning if content was omitted or placed in reasoning
+      if ((!content || typeof content !== "string" || !content.trim()) && message?.reasoning) {
+        if (
+          message.reasoning.includes("<!DOCTYPE") ||
+          message.reasoning.includes("```") ||
+          message.reasoning.includes("<html") ||
+          message.reasoning.includes("{")
+        ) {
+          content = message.reasoning;
+        }
       }
-      throw fallbackErr;
+
+      if (content && typeof content === "string" && content.trim().length > 0) {
+        if (!isPrimary) {
+          console.log(`[OpenRouter Cascade] Recovered successfully with model "${currentModel}"`);
+        }
+        return { content, modelUsed: currentModel };
+      }
+
+      console.warn(`[OpenRouter] Empty content from model "${currentModel}"`);
+      lastError = new Error(`Empty content returned by model "${currentModel}"`);
+    } catch (err) {
+      const status = err.response?.status;
+      const errorMsg = err.response?.data?.error?.message || err.message;
+      console.warn(`[OpenRouter] Model "${currentModel}" failed (${status || "ERR"}): ${errorMsg}`);
+      lastError = err;
+
+      // If user hit 401 unauthorized (invalid key), stop cascade immediately
+      if (status === 401) {
+        throw new Error("Invalid OpenRouter API Key in configuration.");
+      }
     }
   }
+
+  throw lastError || new Error("Failed to generate content with available OpenRouter models");
 };
