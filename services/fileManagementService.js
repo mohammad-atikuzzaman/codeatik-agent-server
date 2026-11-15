@@ -1,43 +1,47 @@
-import fs from "fs";
-import path from "path";
 import AdmZip from "adm-zip";
-import serverConfig from "../config/serverConfig.js";
 
-export const saveGeneratedFiles = async (id, files) => {
-  const outputPath = path.join(serverConfig.GENERATED_SITES_DIR, id);
-
-  if (!fs.existsSync(outputPath)) {
-    fs.mkdirSync(outputPath, { recursive: true });
-  }
-
-  for (const [filePath, content] of Object.entries(files)) {
-    const fullPath = path.join(outputPath, filePath);
-    const dir = path.dirname(fullPath);
-
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
-    fs.writeFileSync(fullPath, content);
-  }
-
-  return outputPath;
-};
-
-export const createZipArchive = async (site) => {
-  const zipPath = path.join(serverConfig.GENERATED_SITES_DIR, `${site.id}.zip`);
+/**
+ * Generates a ZIP archive directly in memory from a file manifest array
+ * or from a key-value object of files.
+ * @param {Array<{name: string, content: string}> | Object<string, string>} files
+ * @returns {Buffer} ZIP archive buffer ready for HTTP streaming
+ */
+export const generateInMemoryZip = (files) => {
   const zip = new AdmZip();
 
-  zip.addLocalFolder(site.path);
-  zip.writeZip(zipPath);
+  if (Array.isArray(files)) {
+    for (const file of files) {
+      if (file && file.name && typeof file.content === "string") {
+        zip.addFile(file.name, Buffer.from(file.content, "utf-8"));
+      }
+    }
+  } else if (files && typeof files === "object") {
+    for (const [fileName, content] of Object.entries(files)) {
+      if (typeof content === "string") {
+        zip.addFile(fileName, Buffer.from(content, "utf-8"));
+      }
+    }
+  }
 
-  return zipPath;
+  return zip.toBuffer();
 };
 
-export const cleanupZip = (siteId) => {
-  const zipPath = path.join(serverConfig.GENERATED_SITES_DIR, `${siteId}.zip`);
-
-  if (fs.existsSync(zipPath)) {
-    fs.unlinkSync(zipPath);
-  }
+/**
+ * Determines MIME type from file extension.
+ * @param {string} fileName
+ * @returns {string} MIME type
+ */
+export const getMimeType = (fileName) => {
+  const ext = fileName.split(".").pop().toLowerCase();
+  const mimeTypes = {
+    html: "text/html; charset=utf-8",
+    htm: "text/html; charset=utf-8",
+    css: "text/css; charset=utf-8",
+    js: "application/javascript; charset=utf-8",
+    mjs: "application/javascript; charset=utf-8",
+    json: "application/json; charset=utf-8",
+    svg: "image/svg+xml",
+    txt: "text/plain; charset=utf-8",
+  };
+  return mimeTypes[ext] || "text/plain; charset=utf-8";
 };

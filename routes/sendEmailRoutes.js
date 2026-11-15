@@ -7,18 +7,20 @@ import { transporter } from "../config/nodeMailerConfig.js";
 
 const router = Router();
 
-
 router.post("/", async (req, res) => {
   const { name, email, subject, message } = req.body;
 
+  if (!email || !message) {
+    return res.status(400).json({ error: "Email and message are required" });
+  }
+
   try {
-    // Email to the recipient (your email)
     const mailOptionsToYou = {
       from: process.env.EMAIL_USER,
       to: process.env.EMAIL_USER,
-      subject: `New Contact Form: ${subject}`,
+      subject: `New Contact Form: ${subject || "Inquiry"}`,
       html: createContactEmailTemplate(name, email, message),
-      text: `You have received a new message from ${name} (${email}):\n\n${message}`, // Fallback text version
+      text: `You have received a new message from ${name} (${email}):\n\n${message}`,
     };
 
     const mailOptionsToUser = {
@@ -29,7 +31,6 @@ router.post("/", async (req, res) => {
       text: `Dear ${name},\n\nThank you for contacting us. We have received your message and will get back to you soon.\n\nYour message:\n${message}\n\nBest regards,\nThe CodeAtik Team`,
     };
 
-    // Send both emails
     await transporter.sendMail(mailOptionsToYou);
     await transporter.sendMail(mailOptionsToUser);
 
